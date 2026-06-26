@@ -18,3 +18,6 @@ def test_subtract_negative_numbers():
 
 def test_subtract_mixed_numbers():
     assert subtract(10, -3) == 13
+
+def test_will_fail():
+    assert False
