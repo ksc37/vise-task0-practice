@@ -1,0 +1,62 @@
+name: vise-gate
+
+on:
+  pull_request:
+    branches: [main]
+
+# 永不開 auto-merge
+concurrency:
+  group: vise-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: vise-gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install gate tools
+        run: |
+          ~/.local/bin/uv tool install pytest
+          ~/.local/bin/uv tool install pip-audit
+          ~/.local/bin/uv tool install bandit
+
+      - name: Install project dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+      - name: 【1/3】Tests
+        run: ~/.local/bin/pytest -v
+
+      - name: 【2/3】Dependency scan (pip-audit)
+        run: |
+          if [ -f requirements.txt ] || [ -f setup.py ] || [ -f pyproject.toml ]; then
+            ~/.local/bin/pip-audit --skip-editable
+          else
+            echo "No Python dependency file found, skipping"
+          fi
+
+      - name: 【3/3】SAST (bandit)
+        run: |
+          PY_FILES=$(find . -name "*.py" -not -path "./.git/*" -not -path "./.vise/*" | head -1)
+          if [ -n "$PY_FILES" ]; then
+            ~/.local/bin/bandit -r . \
+              --exclude "./.git,./.vise,./node_modules" \
+              --severity-level medium \
+              --confidence-level medium \
+              -q
+          else
+            echo "No Python files found, skipping bandit"
+          fi
